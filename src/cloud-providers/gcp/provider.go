@@ -66,6 +66,14 @@ func NewProvider(config *Config) (provider.Provider, error) {
 func getIPs(instance *computepb.Instance) ([]netip.Addr, error) {
 	var podNodeIPs []netip.Addr
 	for _, nic := range instance.GetNetworkInterfaces() {
+		if ipStr := nic.GetNetworkIP(); ipStr != "" {
+			ip, err := netip.ParseAddr(ipStr)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse pod node internal IP %q: %w", ipStr, err)
+			}
+			podNodeIPs = append(podNodeIPs, ip)
+			logger.Printf("Found pod node internal IP: %s", ip.String())
+		}
 		for _, access := range nic.GetAccessConfigs() {
 			ipStr := access.GetNatIP()
 			ip, err := netip.ParseAddr(ipStr)
@@ -251,7 +259,8 @@ func (p *gcpProvider) CreateInstance(ctx context.Context, podName, sandboxID str
 		MachineType: proto.String(fmt.Sprintf("zones/%s/machineTypes/%s", p.serviceConfig.Zone, p.serviceConfig.MachineType)),
 		NetworkInterfaces: []*computepb.NetworkInterface{
 			{
-				Network: proto.String(p.serviceConfig.Network),
+				Network:    proto.String(p.serviceConfig.Network),
+				Subnetwork: proto.String(p.serviceConfig.Subnetwork),
 				AccessConfigs: []*computepb.AccessConfig{
 					{
 						Name:        proto.String("External NAT"),
